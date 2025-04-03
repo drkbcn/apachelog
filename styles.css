@@ -1,0 +1,71 @@
+/* Estilos personalizados para el visor de logs Apache */
+
+/* Evitar que texto se desborde en las celdas */
+.truncate {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Estilos para el contenedor de arrastrar y soltar cuando se arrastra un archivo */
+.drag-over {
+    background-color: #dbeafe !important;
+    border-color: #3b82f6 !important;
+}
+
+/* Estilos para los estados de las filas (hover) */
+tr.hover-effect:hover td {
+    background-color: #f0f9ff;
+}
+
+/* Alpine.js hide elementos con x-cloak hasta que Alpine.js se inicializa */
+[x-cloak] {
+    display: none !important;
+}
+
+/* Animación de pulsación para indicar elementos interactivos */
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: .7;
+    }
+}
+
+/* Hacer la tabla responsive con scroll horizontal en dispositivos pequeños */
+.table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Estilizar scrollbars para navegadores que lo soporten */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #b0b0b0;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #888;
+}
+
+/* Mejoras de accesibilidad - focus visible para navegación por teclado */
+:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
