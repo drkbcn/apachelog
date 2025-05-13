@@ -386,6 +386,8 @@ function apacheLogViewer() {
         
         // Parse date and time from log
         parseDateTime(dateTimeStr) {
+            // Temporary fix
+            return dateTimeStr;
             // Typical format: 10/Oct/2023:13:55:36 -0700
             try {
                 const [datePart, timePart] = dateTimeStr.split(':');
