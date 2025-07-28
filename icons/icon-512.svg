@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="64" fill="#3b82f6"/>
+  
+  <!-- Log file icon -->
+  <g transform="translate(128, 80)">
+    <!-- Document background -->
+    <path d="M24 24h208v288a24 24 0 01-24 24H48a24 24 0 01-24-24V48a24 24 0 0124-24z" fill="white"/>
+    
+    <!-- Lines representing log entries -->
+    <rect x="48" y="64" width="160" height="12" rx="6" fill="#3b82f6"/>
+    <rect x="48" y="96" width="120" height="12" rx="6" fill="#6b7280"/>
+    <rect x="48" y="128" width="144" height="12" rx="6" fill="#6b7280"/>
+    <rect x="48" y="160" width="100" height="12" rx="6" fill="#6b7280"/>
+    <rect x="48" y="192" width="152" height="12" rx="6" fill="#3b82f6"/>
+    <rect x="48" y="224" width="112" height="12" rx="6" fill="#6b7280"/>
+    <rect x="48" y="256" width="136" height="12" rx="6" fill="#6b7280"/>
+    <rect x="48" y="288" width="96" height="12" rx="6" fill="#6b7280"/>
+  </g>
+  
+  <!-- Analytics symbol -->
+  <g transform="translate(320, 320)">
+    <circle cx="48" cy="48" r="48" fill="white"/>
+    <path d="M24 60h12v-24h12v36h12v-48h12v60H24z" fill="#3b82f6"/>
+  </g>
+</svg>
