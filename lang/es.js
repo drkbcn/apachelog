@@ -13,6 +13,12 @@ const langEs = {
     "apacheLogFiles": "Archivos de log de Apache",
     "processing": "Procesando",
     
+    // File handling
+    "largeSizeWarning": "Este archivo es bastante grande y puede tardar en procesarse. ¿Continuar?",
+    "invalidFileType": "Por favor seleccione un archivo de log válido (.log, .txt, .access, .error)",
+    "fileReadError": "Error al leer el archivo. Por favor, inténtelo de nuevo.",
+    "noValidLogs": "No se encontraron entradas de log válidas. Por favor, verifique el formato del log.",
+    
     // Filters
     "search": "Buscar...",
     "activeFilters": "Filtros activos",
@@ -26,6 +32,25 @@ const langEs = {
     "url": "URL",
     "userAgent": "User Agent",
     "country": "País",
+    
+    // Filters
+    "activeFilters": "Filtros Activos",
+    "clearFilters": "Limpiar Todo",
+    "dateRange": "Rango de Fechas",
+    "dateFrom": "Fecha Desde",
+    "dateTo": "Fecha Hasta",
+    "timeFrom": "Hora Desde",
+    "timeTo": "Hora Hasta",
+    "applyDateFilter": "Aplicar Filtro de Fecha",
+    "clearDateFilter": "Limpiar Filtro de Fecha",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "last7Days": "Últimos 7 días",
+    "last30Days": "Últimos 30 días",
+    "dateFilterActive": "Filtro de fecha activo",
+    "filterBy": "Filtrar por",
+    "excludeFilter": "Excluir",
+    "includeFilter": "Incluir",
     
     // Pagination
     "showing": "Mostrando",
@@ -48,7 +73,7 @@ const langEs = {
     "bytes": "Bytes",
     "hostname": "Hostname",
     "lookup": "Consultar",
-    "viewInAbuseIPDB": "Ver en AbuseIPDB",
+    "viewInAbuseIPDB": "Verificar en AbuseIPDB",
     
     // IP actions
     "reverseLookup": "Búsqueda Inversa",
@@ -58,13 +83,47 @@ const langEs = {
     "organization": "Organización",
     "isp": "ISP",
     "location": "Ubicación",
+    "ipInformation": "Información de IP",
+    "queryingInfo": "Consultando información...",
     
     // Status codes
     "statusInfo": "Informativo",
     "statusSuccess": "Éxito",
     "statusRedirect": "Redirección",
     "statusClientError": "Error de Cliente",
-    "statusServerError": "Error de Servidor"
+    "statusServerError": "Error de Servidor",
+    
+    // Statistics
+    "statistics": "Estadísticas",
+    "totalRequests": "Total de Peticiones",
+    "uniqueIPs": "IPs Únicas",
+    "requestMethods": "Métodos de Petición",
+    "httpStatuses": "Códigos de Estado HTTP",
+    "topIPs": "IPs más Frecuentes",
+    "topURLs": "URLs más Visitadas",
+    "browserFamilies": "Familias de Navegadores",
+    "operatingSystems": "Sistemas Operativos",
+    "errorRate": "Tasa de Errores",
+    "averageResponseSize": "Tamaño Promedio de Respuesta",
+    "requests": "peticiones",
+    "chrome": "Chrome",
+    "firefox": "Firefox",
+    "safari": "Safari",
+    "edge": "Edge",
+    "opera": "Opera",
+    "bot": "Bot/Crawler",
+    "other": "Otros",
+    "windows": "Windows",
+    "macos": "macOS",
+    "linux": "Linux",
+    "android": "Android",
+    "ios": "iOS",
+    "unknown": "Desconocido",
+    "showAll": "Mostrar Todos",
+    "hideDetails": "Ocultar Detalles",
+    "noDataAvailable": "No hay datos disponibles",
+    "refreshStats": "Actualizar Estadísticas",
+    "calculating": "Calculando..."
 };
 
 // Register this language with the translation system

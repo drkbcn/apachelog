@@ -13,6 +13,12 @@ const langEn = {
     "apacheLogFiles": "Apache log files",
     "processing": "Processing",
     
+    // File handling
+    "largeSizeWarning": "This file is quite large and may take time to process. Continue?",
+    "invalidFileType": "Please select a valid log file (.log, .txt, .access, .error)",
+    "fileReadError": "Error reading file. Please try again.",
+    "noValidLogs": "No valid log entries found. Please check the log format.",
+    
     // Filters
     "search": "Search...",
     "activeFilters": "Active Filters",
@@ -26,6 +32,25 @@ const langEn = {
     "url": "URL",
     "userAgent": "User Agent",
     "country": "Country",
+    
+    // Filters
+    "activeFilters": "Active Filters",
+    "clearFilters": "Clear All",
+    "dateRange": "Date Range",
+    "dateFrom": "From Date",
+    "dateTo": "To Date",
+    "timeFrom": "From Time",
+    "timeTo": "To Time",
+    "applyDateFilter": "Apply Date Filter",
+    "clearDateFilter": "Clear Date Filter",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "last7Days": "Last 7 days",
+    "last30Days": "Last 30 days",
+    "dateFilterActive": "Date filter active",
+    "filterBy": "Filter by",
+    "excludeFilter": "Exclude",
+    "includeFilter": "Include",
     
     // Pagination
     "showing": "Showing",
@@ -48,7 +73,7 @@ const langEn = {
     "bytes": "Bytes",
     "hostname": "Hostname",
     "lookup": "Lookup",
-    "viewInAbuseIPDB": "View in AbuseIPDB",
+    "viewInAbuseIPDB": "Check in AbuseIPDB",
     
     // IP actions
     "reverseLookup": "Reverse Lookup",
@@ -58,13 +83,47 @@ const langEn = {
     "organization": "Organization",
     "isp": "ISP",
     "location": "Location",
+    "ipInformation": "IP Information",
+    "queryingInfo": "Querying information...",
     
     // Status codes
     "statusInfo": "Informational",
     "statusSuccess": "Success",
     "statusRedirect": "Redirect",
     "statusClientError": "Client Error",
-    "statusServerError": "Server Error"
+    "statusServerError": "Server Error",
+    
+    // Statistics
+    "statistics": "Statistics",
+    "totalRequests": "Total Requests",
+    "uniqueIPs": "Unique IPs",
+    "requestMethods": "Request Methods",
+    "httpStatuses": "HTTP Status Codes",
+    "topIPs": "Top IPs",
+    "topURLs": "Top URLs",
+    "browserFamilies": "Browser Families",
+    "operatingSystems": "Operating Systems",
+    "errorRate": "Error Rate",
+    "averageResponseSize": "Avg. Response Size",
+    "requests": "requests",
+    "chrome": "Chrome",
+    "firefox": "Firefox",
+    "safari": "Safari",
+    "edge": "Edge",
+    "opera": "Opera",
+    "bot": "Bot/Crawler",
+    "other": "Other",
+    "windows": "Windows",
+    "macos": "macOS",
+    "linux": "Linux",
+    "android": "Android",
+    "ios": "iOS",
+    "unknown": "Unknown",
+    "showAll": "Show All",
+    "hideDetails": "Hide Details",
+    "noDataAvailable": "No data available",
+    "refreshStats": "Refresh Statistics",
+    "calculating": "Calculating..."
 };
 
 // Register this language with the translation system
