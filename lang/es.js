@@ -15,9 +15,17 @@ const langEs = {
     
     // File handling
     "largeSizeWarning": "Este archivo es bastante grande y puede tardar en procesarse. ¿Continuar?",
+    "largeFileWarning": "Este archivo es muy grande. Se utilizará procesamiento optimizado con múltiples hilos para mejorar el rendimiento.",
     "invalidFileType": "Por favor seleccione un archivo de log válido (.log, .txt, .access, .error)",
     "fileReadError": "Error al leer el archivo. Por favor, inténtelo de nuevo.",
+    "processingError": "Error al procesar el archivo. Por favor, verifique el formato.",
     "noValidLogs": "No se encontraron entradas de log válidas. Por favor, verifique el formato del log.",
+    "optimizedProcessing": "Usando procesamiento optimizado para archivos grandes...",
+    "calculating": "Calculando estadísticas...",
+    "filtering": "Filtrando registros...",
+    "sorting": "Ordenando registros...",
+    "updating": "Actualizando resultados...",
+    "processing": "Procesando...",
     
     // Filters
     "search": "Buscar...",
@@ -123,7 +131,13 @@ const langEs = {
     "hideDetails": "Ocultar Detalles",
     "noDataAvailable": "No hay datos disponibles",
     "refreshStats": "Actualizar Estadísticas",
-    "calculating": "Calculando..."
+    "calculating": "Calculando...",
+    
+    // Operation states
+    "filtering": "Filtrando",
+    "sorting": "Ordenando",
+    "paginating": "Cambiando página",
+    "updating": "Actualizando"
 };
 
 // Register this language with the translation system

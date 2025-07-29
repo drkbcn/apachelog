@@ -1,10 +1,11 @@
-const CACHE_NAME = 'apache-log-viewer-v2.3.0';
+const CACHE_NAME = 'apache-log-viewer-v2.4.0';
 const urlsToCache = [
   '.',
   'index.html',
   'css/styles.css',
   'js/script.js',
   'js/translations.js',
+  'js/log-worker.js',
   'lang/en.js',
   'lang/es.js',
   'lang/fr.js',

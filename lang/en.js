@@ -15,9 +15,17 @@ const langEn = {
     
     // File handling
     "largeSizeWarning": "This file is quite large and may take time to process. Continue?",
+    "largeFileWarning": "This file is very large. Optimized multi-threaded processing will be used for better performance.",
     "invalidFileType": "Please select a valid log file (.log, .txt, .access, .error)",
     "fileReadError": "Error reading file. Please try again.",
+    "processingError": "Error processing file. Please check the file format.",
     "noValidLogs": "No valid log entries found. Please check the log format.",
+    "optimizedProcessing": "Using optimized processing for large files...",
+    "calculating": "Calculating statistics...",
+    "filtering": "Filtering logs...",
+    "sorting": "Sorting logs...",
+    "updating": "Updating results...",
+    "processing": "Processing...",
     
     // Filters
     "search": "Search...",
@@ -123,7 +131,13 @@ const langEn = {
     "hideDetails": "Hide Details",
     "noDataAvailable": "No data available",
     "refreshStats": "Refresh Statistics",
-    "calculating": "Calculating..."
+    "calculating": "Calculating...",
+    
+    // Operation states
+    "filtering": "Filtering",
+    "sorting": "Sorting",
+    "paginating": "Changing page",
+    "updating": "Updating"
 };
 
 // Register this language with the translation system

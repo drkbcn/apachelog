@@ -51,6 +51,12 @@ function apacheLogViewer() {
         // IP info cache
         ipInfoCache: {},        // Cache for IP information (reverse lookup, geo, abuse)
         
+        // Loading states for UI feedback
+        isFiltering: false,     // Whether filtering is in progress
+        isSorting: false,       // Whether sorting is in progress
+        isPaginating: false,    // Whether pagination is being updated
+        currentOperation: '',   // Description of current operation
+        
         // Language settings
         language: 'en',         // Default language
         t: {},                  // Translations object
@@ -76,6 +82,29 @@ function apacheLogViewer() {
         init() {
             console.log('Initializing Apache Log Viewer...');
             console.log('Available translations:', typeof translations !== 'undefined' ? Object.keys(translations) : 'translations not loaded');
+            
+            // Ensure all arrays are properly initialized
+            this.logs = this.logs || [];
+            this.filteredLogs = this.filteredLogs || [];
+            this.paginatedLogs = this.paginatedLogs || [];
+            this.activeFilters = this.activeFilters || [];
+            this.uniqueStatusCodes = this.uniqueStatusCodes || [];
+            this.uniqueMethods = this.uniqueMethods || [];
+            
+            // Ensure statistics object is properly initialized
+            this.statistics = this.statistics || {
+                totalRequests: 0,
+                uniqueIPs: 0,
+                requestMethods: {},
+                httpStatuses: {},
+                topIPs: [],
+                topURLs: [],
+                browserFamilies: {},
+                operatingSystems: {},
+                errorRate: 0,
+                averageResponseSize: 0,
+                totalBytes: 0
+            };
             
             // Set up translations
             this.detectLanguage();
@@ -232,10 +261,14 @@ function apacheLogViewer() {
                 return;
             }
             
-            // Check file size (warn for files larger than 50MB)
-            if (file.size > 50 * 1024 * 1024) {
-                if (!confirm(this.translate('largeSizeWarning') || 'This file is quite large and may take time to process. Continue?')) {
-                    // Reset input value to allow selecting the same file again
+            // Check file size and optimize processing strategy
+            const fileSize = file.size;
+            const fileSizeMB = fileSize / (1024 * 1024);
+            
+            if (fileSize > 50 * 1024 * 1024) {
+                const message = this.translate('largeSizeWarning') || 
+                    `This file is ${this.formatFileSize(fileSize)} (${fileSizeMB.toFixed(1)}MB). Large files will use optimized processing but may take time. Continue?`;
+                if (!confirm(message)) {
                     event.target.value = '';
                     return;
                 }
@@ -247,13 +280,12 @@ function apacheLogViewer() {
             
             if (!hasValidExtension) {
                 alert(this.translate('invalidFileType') || 'Please select a valid log file (.log, .txt, .access, .error)');
-                // Reset input value to allow selecting the same file again
                 event.target.value = '';
                 return;
             }
             
             this.fileName = file.name;
-            this.fileSize = this.formatFileSize(file.size);
+            this.fileSize = this.formatFileSize(fileSize);
             this.isProcessing = true;
             this.processProgress = 0;
             this.logs = [];
@@ -262,10 +294,33 @@ function apacheLogViewer() {
             this.uniqueMethods = [];
             this.currentPage = 1;
             
-            // Clear cache
+            // Clear cache and reset pagination
             this.ipInfoCache = {};
+            this.adjustPageSizeForFileSize(fileSizeMB);
             
-            // Read the file
+            // Use optimized processing for large files
+            if (fileSize > 10 * 1024 * 1024) { // 10MB threshold
+                this.processLargeFile(file);
+            } else {
+                this.processSmallFile(file);
+            }
+        },
+        
+        // Adjust page size based on file size for better performance
+        adjustPageSizeForFileSize(fileSizeMB) {
+            if (fileSizeMB > 100) {
+                this.perPage = 50;   // Very large files: 50 entries per page
+            } else if (fileSizeMB > 50) {
+                this.perPage = 100;  // Large files: 100 entries per page
+            } else if (fileSizeMB > 10) {
+                this.perPage = 250;  // Medium files: 250 entries per page
+            } else {
+                this.perPage = 500;  // Small files: 500 entries per page
+            }
+        },
+        
+        // Process small files traditionally
+        processSmallFile(file) {
             const reader = new FileReader();
             const self = this;
             
@@ -276,19 +331,167 @@ function apacheLogViewer() {
             
             reader.onprogress = function(e) {
                 if (e.lengthComputable) {
-                    self.processProgress = Math.round((e.loaded / e.total) * 30); // 30% for loading
+                    self.processProgress = Math.round((e.loaded / e.total) * 30);
                 }
             };
             
             reader.onerror = function() {
                 self.isProcessing = false;
-                // Reset input value to allow selecting the same file again
                 const fileInput = document.getElementById('file-upload');
                 if (fileInput) fileInput.value = '';
                 alert(self.translate('fileReadError') || 'Error reading file');
             };
             
             reader.readAsText(file);
+        },
+        
+        // Process large files using Web Workers for better performance
+        processLargeFile(file) {
+            const self = this;
+            const maxWorkers = Math.min(navigator.hardwareConcurrency || 4, 6);
+            
+            this.processProgress = 10;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                self.processProgress = 20;
+                
+                // Check if Web Workers are available
+                if (typeof Worker === 'undefined') {
+                    console.warn('Web Workers not available, falling back to single-threaded processing');
+                    self.processLogFile(content);
+                    return;
+                }
+                
+                // Use Web Workers for parallel processing
+                const workers = [];
+                const results = [];
+                let completedWorkers = 0;
+                
+                for (let i = 0; i < maxWorkers; i++) {
+                    try {
+                        const worker = new Worker('js/log-worker.js');
+                        workers.push(worker);
+                        
+                        worker.onmessage = function(e) {
+                            const { type, workerIndex, parsed, uniqueStatuses, uniqueMethods, progress, error } = e.data;
+                            
+                            if (type === 'progress') {
+                                const baseProgress = 20 + (workerIndex / maxWorkers) * 60;
+                                const workerProgress = (progress / 100) * (60 / maxWorkers);
+                                self.processProgress = Math.round(baseProgress + workerProgress);
+                            } else if (type === 'complete') {
+                                results[workerIndex] = { parsed, uniqueStatuses, uniqueMethods };
+                                completedWorkers++;
+                                
+                                if (completedWorkers === maxWorkers) {
+                                    self.combineWorkerResults(results);
+                                    workers.forEach(w => w.terminate());
+                                }
+                            } else if (type === 'error') {
+                                console.error(`Worker ${workerIndex} error:`, error);
+                                completedWorkers++;
+                                results[workerIndex] = { parsed: [], uniqueStatuses: [], uniqueMethods: [] };
+                                
+                                if (completedWorkers === maxWorkers) {
+                                    self.combineWorkerResults(results);
+                                    workers.forEach(w => w.terminate());
+                                }
+                            }
+                        };
+                        
+                        worker.onerror = function(error) {
+                            console.error(`Worker ${i} error:`, error);
+                            completedWorkers++;
+                            results[i] = { parsed: [], uniqueStatuses: [], uniqueMethods: [] };
+                            
+                            if (completedWorkers === maxWorkers) {
+                                self.combineWorkerResults(results);
+                                workers.forEach(w => w.terminate());
+                            }
+                        };
+                        
+                        worker.postMessage({
+                            content: content,
+                            chunkSize: 1000,
+                            workerIndex: i,
+                            totalWorkers: maxWorkers
+                        });
+                        
+                    } catch (error) {
+                        console.error('Failed to create worker:', error);
+                        // Fallback to single-threaded processing
+                        self.processLogFile(content);
+                        return;
+                    }
+                }
+            };
+            
+            reader.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    self.processProgress = Math.round((e.loaded / e.total) * 10);
+                }
+            };
+            
+            reader.onerror = function() {
+                self.isProcessing = false;
+                const fileInput = document.getElementById('file-upload');
+                if (fileInput) fileInput.value = '';
+                alert(self.translate('fileReadError') || 'Error reading file');
+            };
+            
+            reader.readAsText(file);
+        },
+        
+        // Combine results from multiple workers
+        combineWorkerResults(results) {
+            this.processProgress = 85;
+            
+            const allLogs = [];
+            const allStatuses = new Set();
+            const allMethods = new Set();
+            
+            // Combine all results with safety checks
+            for (const result of results) {
+                if (result && result.parsed && Array.isArray(result.parsed)) {
+                    allLogs.push(...result.parsed);
+                }
+                if (result && result.uniqueStatuses && Array.isArray(result.uniqueStatuses)) {
+                    result.uniqueStatuses.forEach(status => allStatuses.add(status));
+                }
+                if (result && result.uniqueMethods && Array.isArray(result.uniqueMethods)) {
+                    result.uniqueMethods.forEach(method => allMethods.add(method));
+                }
+            }
+            
+            // Sort by line number to maintain order
+            allLogs.sort((a, b) => (a.lineNumber || 0) - (b.lineNumber || 0));
+            
+            this.logs = allLogs;
+            this.uniqueStatusCodes = Array.from(allStatuses).sort((a, b) => a - b);
+            this.uniqueMethods = Array.from(allMethods).sort();
+            
+            this.processProgress = 95;
+            this.finishProcessingFinal();
+        },
+        
+        // Finish processing and update UI (for worker results)
+        finishProcessingFinal() {
+            // Calculate date range for filters
+            this.calculateLogDateRange();
+            
+            // Apply initial filters and pagination
+            this.applyFilters();
+            
+            this.processProgress = 100;
+            this.isProcessing = false;
+            
+            console.log(`Processed ${this.logs.length} log entries with optimized performance`);
+            
+            // Reset file input
+            const fileInput = document.getElementById('file-upload');
+            if (fileInput) fileInput.value = '';
         },
         
         // Process the log file content
@@ -366,11 +569,11 @@ function apacheLogViewer() {
         finishProcessing(parsed, uniqueStatuses, uniqueMethods, startTime) {
             const processingTime = Date.now() - startTime;
             
-            this.logs = parsed;
+            this.logs = parsed || [];
             
-            // Sort and store unique values for filter dropdowns
-            this.uniqueStatusCodes = Array.from(uniqueStatuses).sort((a, b) => a - b);
-            this.uniqueMethods = Array.from(uniqueMethods).sort();
+            // Sort and store unique values for filter dropdowns with safety checks
+            this.uniqueStatusCodes = uniqueStatuses ? Array.from(uniqueStatuses).sort((a, b) => a - b) : [];
+            this.uniqueMethods = uniqueMethods ? Array.from(uniqueMethods).sort() : [];
             
             // Calculate date range for the loaded logs
             this.calculateLogDateRange();
@@ -570,38 +773,74 @@ function apacheLogViewer() {
         
         // Sort logs by a specific field
         sortBy(field) {
-            if (this.sortField === field) {
-                // If we were already sorting by this field, reverse the order
-                this.sortAsc = !this.sortAsc;
-            } else {
-                this.sortField = field;
-                
-                // By default, sort dates descending (most recent first)
-                // and text ascending (A-Z)
-                this.sortAsc = field !== 'datetime';
-            }
+            this.isSorting = true;
+            this.currentOperation = this.translate('sorting') || 'Sorting logs...';
             
-            const direction = this.sortAsc ? 1 : -1;
-            
-            this.filteredLogs.sort((a, b) => {
-                let valA = a[field];
-                let valB = b[field];
-                
-                if (typeof valA === 'string') {
-                    return direction * valA.localeCompare(valB);
-                } else if (valA instanceof Date) {
-                    return direction * (valA.getTime() - valB.getTime());
-                } else {
-                    // Numeric or other type
-                    return direction * (valA - valB);
+            setTimeout(() => {
+                try {
+                    if (this.sortField === field) {
+                        // If we were already sorting by this field, reverse the order
+                        this.sortAsc = !this.sortAsc;
+                    } else {
+                        this.sortField = field;
+                        
+                        // By default, sort dates descending (most recent first)
+                        // and text ascending (A-Z)
+                        this.sortAsc = field !== 'datetime';
+                    }
+                    
+                    const direction = this.sortAsc ? 1 : -1;
+                    
+                    this.filteredLogs.sort((a, b) => {
+                        let valA = a[field];
+                        let valB = b[field];
+                        
+                        if (typeof valA === 'string') {
+                            return direction * valA.localeCompare(valB);
+                        } else if (valA instanceof Date) {
+                            return direction * (valA.getTime() - valB.getTime());
+                        } else {
+                            // Numeric or other type
+                            return direction * (valA - valB);
+                        }
+                    });
+                    
+                    this.updatePagination();
+                } finally {
+                    this.isSorting = false;
+                    this.currentOperation = '';
                 }
-            });
-            
-            this.updatePagination();
+            }, 50);
         },
         
         // Apply filters to logs (optimized for performance)
         applyFilters() {
+            this.isFiltering = true;
+            this.currentOperation = this.translate('filtering') || 'Filtering logs...';
+            
+            const startTime = performance.now();
+            
+            // Use setTimeout to allow UI to update before heavy operation
+            setTimeout(() => {
+                try {
+                    // Use efficient filtering for large datasets
+                    if (this.logs.length > 50000) {
+                        this.applyFiltersOptimized();
+                    } else {
+                        this.applyFiltersStandard();
+                    }
+                    
+                    const endTime = performance.now();
+                    console.log(`Filtering completed in ${(endTime - startTime).toFixed(2)}ms for ${this.filteredLogs.length} results`);
+                } finally {
+                    this.isFiltering = false;
+                    this.currentOperation = '';
+                }
+            }, 50); // Small delay to allow UI update
+        },
+        
+        // Standard filtering for smaller datasets
+        applyFiltersStandard() {
             let result = [...this.logs]; // Copy all logs
             
             // Apply active filters
@@ -645,6 +884,153 @@ function apacheLogViewer() {
                     });
                 }
             }
+            
+            // Apply search query
+            if (this.searchQuery.trim()) {
+                const searchTerm = this.searchQuery.toLowerCase().trim();
+                result = result.filter(log => {
+                    return log.ip.toLowerCase().includes(searchTerm) ||
+                           log.url.toLowerCase().includes(searchTerm) ||
+                           log.method.toLowerCase().includes(searchTerm) ||
+                           String(log.status).includes(searchTerm) ||
+                           log.userAgent.toLowerCase().includes(searchTerm) ||
+                           log.referrer.toLowerCase().includes(searchTerm);
+                });
+            }
+            
+            // Apply date range filter
+            result = this.applyDateRangeFilter(result);
+            
+            this.filteredLogs = result;
+            this.updatePaginationWithLoading();
+        },
+        
+        // Optimized filtering for large datasets
+        applyFiltersOptimized() {
+            const chunkSize = 10000;
+            const totalChunks = Math.ceil(this.logs.length / chunkSize);
+            let result = [];
+            
+            // Process in chunks to avoid blocking UI
+            const processChunk = (chunkIndex) => {
+                const startIdx = chunkIndex * chunkSize;
+                const endIdx = Math.min(startIdx + chunkSize, this.logs.length);
+                const chunk = this.logs.slice(startIdx, endIdx);
+                
+                let filteredChunk = chunk;
+                
+                // Pre-compile search terms for better performance
+                const searchTerm = this.searchQuery.toLowerCase().trim();
+                const includeFilters = this.activeFilters.filter(filter => filter.type === 'include' || !filter.type);
+                const excludeFilters = this.activeFilters.filter(filter => filter.type === 'exclude');
+                
+                // Group include filters by column for efficiency
+                const includeFiltersByColumn = {};
+                includeFilters.forEach(filter => {
+                    if (!includeFiltersByColumn[filter.column]) {
+                        includeFiltersByColumn[filter.column] = [];
+                    }
+                    includeFiltersByColumn[filter.column].push(String(filter.value).toLowerCase());
+                });
+                
+                // Apply all filters in one pass
+                filteredChunk = chunk.filter(log => {
+                    // Check include filters first (most restrictive)
+                    if (includeFilters.length > 0) {
+                        for (const [column, filterValues] of Object.entries(includeFiltersByColumn)) {
+                            const logValue = String(log[column] || '').toLowerCase();
+                            const hasMatch = filterValues.some(filterValue => logValue.includes(filterValue));
+                            if (!hasMatch) return false;
+                        }
+                    }
+                    
+                    // Check exclude filters
+                    if (excludeFilters.length > 0) {
+                        for (const filter of excludeFilters) {
+                            const logValue = String(log[filter.column] || '').toLowerCase();
+                            const filterValue = String(filter.value).toLowerCase();
+                            if (logValue.includes(filterValue)) return false;
+                        }
+                    }
+                    
+                    // Check search query
+                    if (searchTerm) {
+                        const searchableText = `${log.ip} ${log.url} ${log.method} ${log.status} ${log.userAgent} ${log.referrer}`.toLowerCase();
+                        if (!searchableText.includes(searchTerm)) return false;
+                    }
+                    
+                    // Check date range
+                    if (!this.isInDateRange(log)) return false;
+                    
+                    return true;
+                });
+                
+                result.push(...filteredChunk);
+                
+                // Continue with next chunk or finish
+                if (chunkIndex < totalChunks - 1) {
+                    // Use setTimeout to yield control back to browser
+                    setTimeout(() => processChunk(chunkIndex + 1), 1);
+                } else {
+                    // Finished processing all chunks
+                    this.filteredLogs = result;
+                    this.updatePaginationWithLoading();
+                }
+            };
+            
+            // Start processing
+            processChunk(0);
+        },
+        
+        // Optimized date range checking
+        isInDateRange(log) {
+            if (!this.dateFrom && !this.dateTo && !this.timeFrom && !this.timeTo) {
+                return true;
+            }
+            
+            if (!log.timestamp) return true;
+            
+            const logDate = log.timestamp;
+            
+            // Date range check
+            if (this.dateFrom) {
+                const fromDate = new Date(this.dateFrom);
+                if (logDate < fromDate) return false;
+            }
+            
+            if (this.dateTo) {
+                const toDate = new Date(this.dateTo);
+                toDate.setHours(23, 59, 59, 999); // End of day
+                if (logDate > toDate) return false;
+            }
+            
+            // Time range check (if no date filter, apply to all days)
+            if (this.timeFrom || this.timeTo) {
+                const logTime = logDate.getHours() * 60 + logDate.getMinutes();
+                
+                if (this.timeFrom) {
+                    const [fromHour, fromMin] = this.timeFrom.split(':').map(Number);
+                    const fromTime = fromHour * 60 + fromMin;
+                    if (logTime < fromTime) return false;
+                }
+                
+                if (this.timeTo) {
+                    const [toHour, toMin] = this.timeTo.split(':').map(Number);
+                    const toTime = toHour * 60 + toMin;
+                    if (logTime > toTime) return false;
+                }
+            }
+            
+            return true;
+        },
+        
+        // Apply date range filter (optimized version)
+        applyDateRangeFilter(logs) {
+            if (!this.dateFrom && !this.dateTo && !this.timeFrom && !this.timeTo) {
+                return logs;
+            }
+            
+            return logs.filter(log => this.isInDateRange(log));
             
             // Apply date range filter
             if (this.hasActiveDateFilter()) {
@@ -697,6 +1083,21 @@ function apacheLogViewer() {
             this.paginatedLogs = this.filteredLogs.slice(startIndex, endIndex);
         },
         
+        // Update pagination with loading state
+        updatePaginationWithLoading() {
+            this.isPaginating = true;
+            this.currentOperation = this.translate('updating') || 'Updating results...';
+            
+            setTimeout(() => {
+                try {
+                    this.updatePagination();
+                } finally {
+                    this.isPaginating = false;
+                    this.currentOperation = '';
+                }
+            }, 10);
+        },
+        
         // Change page size
         changePageSize(size) {
             this.perPage = parseInt(size);
@@ -712,50 +1113,74 @@ function apacheLogViewer() {
         // Navigate to next page
         nextPage() {
             if (this.currentPage < this.totalPages) {
-                this.currentPage++;
-                this.updatePagination();
+                this.isPaginating = true;
+                this.currentOperation = 'paginating';
                 
-                // Force Alpine.js to update
-                this.$nextTick(() => {
-                    console.debug('Moved to next page:', this.currentPage);
-                });
+                setTimeout(() => {
+                    this.currentPage++;
+                    this.updatePagination();
+                    
+                    // Force Alpine.js to update
+                    this.$nextTick(() => {
+                        console.debug('Moved to next page:', this.currentPage);
+                        this.isPaginating = false;
+                        this.currentOperation = '';
+                    });
+                }, 10);
             }
         },
         
         // Navigate to previous page
         prevPage() {
             if (this.currentPage > 1) {
-                this.currentPage--;
-                this.updatePagination();
+                this.isPaginating = true;
+                this.currentOperation = 'paginating';
                 
-                // Force Alpine.js to update
-                this.$nextTick(() => {
-                    console.debug('Moved to previous page:', this.currentPage);
-                });
+                setTimeout(() => {
+                    this.currentPage--;
+                    this.updatePagination();
+                    
+                    // Force Alpine.js to update
+                    this.$nextTick(() => {
+                        console.debug('Moved to previous page:', this.currentPage);
+                        this.isPaginating = false;
+                        this.currentOperation = '';
+                    });
+                }, 10);
             }
         },
         
         // Go to specific page
         goToPage(pageNumber) {
             if (pageNumber >= 1 && pageNumber <= this.totalPages && pageNumber !== this.currentPage) {
-                this.currentPage = pageNumber;
-                this.updatePagination();
+                this.isPaginating = true;
+                this.currentOperation = 'paginating';
                 
-                // Force Alpine.js to update
-                this.$nextTick(() => {
-                    console.debug('Went to page:', this.currentPage);
-                });
+                setTimeout(() => {
+                    this.currentPage = pageNumber;
+                    this.updatePagination();
+                    
+                    // Force Alpine.js to update
+                    this.$nextTick(() => {
+                        console.debug('Went to page:', this.currentPage);
+                        this.isPaginating = false;
+                        this.currentOperation = '';
+                    });
+                }, 10);
             }
         },
         
         // Add an active filter
         addFilter(column, value) {
+            // Convert value to string to ensure consistency
+            const stringValue = String(value);
+            
             // Avoid duplicates
             const exists = this.activeFilters.some(filter => 
-                filter.column === column && filter.value === value && filter.type === 'include');
+                filter.column === column && String(filter.value) === stringValue && filter.type === 'include');
                 
             if (!exists) {
-                this.activeFilters.push({ column, value, type: 'include' });
+                this.activeFilters.push({ column, value: stringValue, type: 'include' });
                 this.applyFilters();
                 this.selectedLog = null; // Close details modal
             }
@@ -763,12 +1188,15 @@ function apacheLogViewer() {
         
         // Add an exclude filter
         addExcludeFilter(column, value) {
+            // Convert value to string to ensure consistency
+            const stringValue = String(value);
+            
             // Avoid duplicates
             const exists = this.activeFilters.some(filter => 
-                filter.column === column && filter.value === value && filter.type === 'exclude');
+                filter.column === column && String(filter.value) === stringValue && filter.type === 'exclude');
                 
             if (!exists) {
-                this.activeFilters.push({ column, value, type: 'exclude' });
+                this.activeFilters.push({ column, value: stringValue, type: 'exclude' });
                 this.applyFilters();
                 this.selectedLog = null; // Close details modal
             }
@@ -952,42 +1380,204 @@ function apacheLogViewer() {
             this.getIpInfo(log.ip);
         },
         
-        // Get IP information (reverse lookup, geo, abuse)
-        getIpInfo(ip) {
+        // Get IP information with lazy loading and batching
+        getIpInfo(ip, priority = 'low') {
             // Check cache first
             if (this.ipInfoCache[ip]) {
+                const cachedInfo = this.ipInfoCache[ip];
+                
                 // If information is already being fetched, do nothing
-                if (this.ipInfoCache[ip].loading) return;
+                if (cachedInfo.loading) return cachedInfo;
                 
                 // If information exists and is not older than 24 hours, use cached version
-                const cachedInfo = this.ipInfoCache[ip];
-                const cacheTime = cachedInfo.timestamp || 0;
-                const cacheAge = Date.now() - cacheTime;
-                
-                if (cacheAge < 24 * 60 * 60 * 1000 && !cachedInfo.loading) {
-                    return this.ipInfoCache[ip];
+                const cacheAge = Date.now() - (cachedInfo.timestamp || 0);
+                if (cacheAge < 24 * 60 * 60 * 1000) {
+                    return cachedInfo;
                 }
             }
             
-            // Initialize cache entry if not exists
+            // Initialize cache entry
             if (!this.ipInfoCache[ip]) {
                 this.ipInfoCache[ip] = {
-                    loading: true,
+                    loading: false,
                     hostname: null,
                     geo: null,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    priority: priority
                 };
-            } else {
-                this.ipInfoCache[ip].loading = true;
             }
             
-            // Perform reverse lookup
-            this.performReverseLookup(ip);
-            
-            // Fetch geolocation data
-            this.fetchGeoIP(ip);
+            // Add to batch processing queue
+            this.queueIPInfoRequest(ip, priority);
             
             return this.ipInfoCache[ip];
+        },
+        
+        // Queue system for batching IP info requests
+        queueIPInfoRequest(ip, priority) {
+            if (!this.ipInfoQueue) {
+                this.ipInfoQueue = {
+                    high: [],
+                    low: [],
+                    processing: false,
+                    batchSize: 5,
+                    processingDelay: 1000 // 1 second between batches
+                };
+            }
+            
+            // Don't queue if already in cache or being processed
+            if (this.ipInfoCache[ip] && this.ipInfoCache[ip].loading) return;
+            
+            // Add to appropriate priority queue
+            const queue = this.ipInfoQueue[priority] || this.ipInfoQueue.low;
+            if (!queue.includes(ip)) {
+                queue.push(ip);
+            }
+            
+            // Start processing if not already running
+            if (!this.ipInfoQueue.processing) {
+                this.processIPInfoQueue();
+            }
+        },
+        
+        // Process IP info requests in batches
+        async processIPInfoQueue() {
+            if (this.ipInfoQueue.processing) return;
+            
+            this.ipInfoQueue.processing = true;
+            
+            while (this.ipInfoQueue.high.length > 0 || this.ipInfoQueue.low.length > 0) {
+                // Process high priority first
+                const batch = [];
+                
+                // Get high priority IPs first
+                while (batch.length < this.ipInfoQueue.batchSize && this.ipInfoQueue.high.length > 0) {
+                    batch.push(this.ipInfoQueue.high.shift());
+                }
+                
+                // Fill remaining slots with low priority
+                while (batch.length < this.ipInfoQueue.batchSize && this.ipInfoQueue.low.length > 0) {
+                    batch.push(this.ipInfoQueue.low.shift());
+                }
+                
+                // Process batch
+                if (batch.length > 0) {
+                    await this.processBatchIPInfo(batch);
+                    
+                    // Wait between batches to avoid rate limiting
+                    if (this.ipInfoQueue.high.length > 0 || this.ipInfoQueue.low.length > 0) {
+                        await new Promise(resolve => setTimeout(resolve, this.ipInfoQueue.processingDelay));
+                    }
+                }
+            }
+            
+            this.ipInfoQueue.processing = false;
+        },
+        
+        // Process a batch of IP info requests
+        async processBatchIPInfo(ipBatch) {
+            const promises = ipBatch.map(ip => this.fetchSingleIPInfo(ip));
+            
+            try {
+                await Promise.allSettled(promises);
+            } catch (error) {
+                console.error('Error processing IP info batch:', error);
+            }
+        },
+        
+        // Fetch information for a single IP
+        async fetchSingleIPInfo(ip) {
+            if (!this.ipInfoCache[ip]) return;
+            
+            this.ipInfoCache[ip].loading = true;
+            
+            try {
+                // Fetch geolocation data with timeout
+                const geoPromise = this.fetchGeoIPOptimized(ip);
+                const hostnamePromise = this.performReverseLookupOptimized(ip);
+                
+                // Wait for both with timeout
+                const results = await Promise.allSettled([
+                    geoPromise,
+                    hostnamePromise
+                ]);
+                
+                // Update cache with results
+                this.ipInfoCache[ip].timestamp = Date.now();
+                
+            } catch (error) {
+                console.error(`Error fetching IP info for ${ip}:`, error);
+            } finally {
+                this.ipInfoCache[ip].loading = false;
+            }
+        },
+        
+        // Optimized geolocation fetch with timeout
+        async fetchGeoIPOptimized(ip) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+            
+            try {
+                const response = await fetch(`https://ipapi.co/${ip}/json/`, {
+                    signal: controller.signal,
+                    headers: {
+                        'User-Agent': 'Apache Log Viewer'
+                    }
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data && !data.error) {
+                        this.ipInfoCache[ip].geo = {
+                            country: data.country_name || 'Unknown',
+                            countryCode: data.country_code || '',
+                            city: data.city || 'Unknown',
+                            org: data.org || 'Unknown'
+                        };
+                    }
+                }
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.warn(`Geo lookup failed for ${ip}:`, error.message);
+                }
+                this.ipInfoCache[ip].geo = null;
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        },
+        
+        // Optimized reverse lookup with timeout
+        async performReverseLookupOptimized(ip) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+            
+            try {
+                const reversedIP = ip.split('.').reverse().join('.');
+                const response = await fetch(`https://dns.google/resolve?name=${reversedIP}.in-addr.arpa&type=PTR`, {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.Answer && data.Answer.length > 0) {
+                        const hostname = data.Answer[0].data;
+                        this.ipInfoCache[ip].hostname = hostname.endsWith('.') ? 
+                            hostname.slice(0, -1) : hostname;
+                    }
+                }
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.warn(`Reverse lookup failed for ${ip}:`, error.message);
+                }
+                this.ipInfoCache[ip].hostname = null;
+            } finally {
+                clearTimeout(timeoutId);
+            }
         },
         
         // Perform reverse DNS lookup
