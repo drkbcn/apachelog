@@ -78,10 +78,21 @@ function apacheLogViewer() {
         statisticsVisible: false, // Whether statistics panel is expanded
         calculatingStatistics: false, // Whether statistics are being calculated
         
+        // PWA and Version Management
+        appVersion: '',             // Current app version (will be set from VersionManager)
+        updateAvailable: false,     // Whether an update is available
+        swRegistration: null,       // Service Worker registration
+        
         // Initialization
         init() {
             console.log('Initializing Apache Log Viewer...');
             console.log('Available translations:', typeof translations !== 'undefined' ? Object.keys(translations) : 'translations not loaded');
+            
+            // Initialize version
+            this.initVersionManager();
+            
+            // Register Service Worker
+            this.registerServiceWorker();
             
             // Ensure all arrays are properly initialized
             this.logs = this.logs || [];
@@ -2101,6 +2112,160 @@ function apacheLogViewer() {
         formatPercentage(value, total) {
             if (total === 0) return '0%';
             return ((value / total) * 100).toFixed(1) + '%';
+        },
+
+        // PWA and Version Management Functions
+
+        // Initialize version manager
+        initVersionManager() {
+            if (typeof VersionManager !== 'undefined') {
+                const versionInfo = VersionManager.getVersionInfo();
+                this.appVersion = `v${versionInfo.version}`;
+                console.log('App version initialized:', this.appVersion);
+            } else {
+                console.warn('VersionManager not available, using fallback version');
+                this.appVersion = 'v2.4.1'; // Fallback
+            }
+        },
+
+        // Register Service Worker for PWA functionality
+        async registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('./sw.js');
+                    this.swRegistration = registration;
+                    
+                    console.log('[PWA] Service Worker registered successfully');
+                    
+                    // Listen for updates
+                    registration.addEventListener('updatefound', () => {
+                        console.log('[PWA] New Service Worker version found');
+                        this.handleServiceWorkerUpdate(registration);
+                    });
+                    
+                    // Listen for messages from Service Worker
+                    navigator.serviceWorker.addEventListener('message', (event) => {
+                        this.handleServiceWorkerMessage(event);
+                    });
+                    
+                    // Check for updates periodically (every 30 minutes)
+                    setInterval(() => {
+                        this.checkForUpdates();
+                    }, 30 * 60 * 1000);
+                    
+                } catch (error) {
+                    console.error('[PWA] Service Worker registration failed:', error);
+                    // Continue without PWA features
+                }
+            } else {
+                console.log('[PWA] Service Worker not supported');
+            }
+        },
+
+        // Handle Service Worker update
+        handleServiceWorkerUpdate(registration) {
+            const newWorker = registration.installing;
+            
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New content is available
+                    this.updateAvailable = true;
+                    this.showUpdateNotification();
+                }
+            });
+        },
+
+        // Handle messages from Service Worker
+        handleServiceWorkerMessage(event) {
+            const { data } = event;
+            
+            switch (data.type) {
+                case 'SW_UPDATED':
+                    console.log('[PWA] Service Worker updated to version:', data.version);
+                    break;
+                    
+                case 'UPDATE_AVAILABLE':
+                    console.log('[PWA] Update available:', data.version);
+                    this.updateAvailable = true;
+                    this.showUpdateNotification();
+                    break;
+                    
+                case 'VERSION_INFO':
+                    console.log('[PWA] Version info received:', data);
+                    break;
+                    
+                default:
+                    console.log('[PWA] Unknown message from SW:', data);
+            }
+        },
+
+        // Check for updates manually
+        async checkForUpdates() {
+            if (this.swRegistration) {
+                try {
+                    await this.swRegistration.update();
+                    console.log('[PWA] Manual update check completed');
+                } catch (error) {
+                    console.error('[PWA] Manual update check failed:', error);
+                }
+            }
+            
+            // Also check using VersionManager
+            if (typeof VersionManager !== 'undefined') {
+                await VersionManager.checkForUpdates();
+            }
+        },
+
+        // Show update notification
+        showUpdateNotification() {
+            // Create a temporary notification
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
+            notification.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        <span>Nueva versión disponible</span>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-blue-200 hover:text-white">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="mt-2">
+                    <button onclick="window.location.reload()" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm">
+                        Actualizar ahora
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 10000);
+        },
+
+        // Update the app (reload)
+        updateApp() {
+            if (this.swRegistration && this.swRegistration.waiting) {
+                // Tell the waiting service worker to skip waiting
+                this.swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                
+                // Listen for controlling service worker change
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    window.location.reload();
+                });
+            } else {
+                // Fallback: just reload the page
+                window.location.reload();
+            }
         }
     };
 }

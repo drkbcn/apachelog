@@ -49,6 +49,57 @@ tr.hover-effect:hover td {
     display: none !important;
 }
 
+/* PWA Update notification styles */
+.update-notification {
+    transition: transform 0.3s ease-in-out;
+    backdrop-filter: blur(4px);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.update-notification button {
+    transition: all 0.2s ease;
+}
+
+.update-notification button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Version indicator styles */
+.version-indicator {
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* PWA install prompt styles */
+.pwa-install {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+/* Loading spinner for updates */
+.update-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 /* Loading animations */
 .pulse {
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;

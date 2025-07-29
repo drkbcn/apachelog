@@ -22,6 +22,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Heroicons (para iconos) -->
     <script src="https://unpkg.com/@heroicons/vue@1.0.4/dist/heroicons.js"></script>
+    <!-- Version Manager -->
+    <script src="js/version.js"></script>
     <!-- Estilos personalizados -->
     <link rel="stylesheet" href="css/styles.css">
     <!-- Alpine.js para interactividad -->
@@ -56,6 +58,17 @@
                         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                     </svg>
                     <span>by <a href="https://github.com/drkbcn/apachelog" target="_blank" rel="noopener noreferrer">drkbcn</a></span>
+                </div>
+                
+                <!-- Version indicator -->
+                <div class="text-xs text-gray-400 ml-3 flex items-center" x-data="{ showUpdate: false }" 
+                     x-init="appVersion = (typeof VersionManager !== 'undefined') ? 'v' + VersionManager.getVersionInfo().version : 'v2.4.1'">
+                    <span x-text="appVersion" class="mr-2">v2.4.1</span>
+                    <div x-show="updateAvailable" class="ml-2">
+                        <button @click="updateApp()" class="bg-blue-500 text-white px-2 py-1 text-xs rounded hover:bg-blue-600 transition-colors" x-text="translate('updateAvailable')">
+                            Update Available
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -1018,19 +1031,172 @@
     <script src="lang/ca.js"></script>
     <script src="js/script.js"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration and Version Management -->
     <script>
+        // Global version management functions
+        window.initVersionManager = function() {
+            if (typeof VersionManager !== 'undefined') {
+                const versionInfo = VersionManager.getVersionInfo();
+                console.log('Version initialized:', versionInfo);
+                return versionInfo;
+            }
+            return { version: '1.0.0' };
+        };
+
+        window.updateApp = function() {
+            window.location.reload();
+        };
+
+        // Service Worker registration with version management
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
+                navigator.serviceWorker.register('./sw.js')
                     .then((registration) => {
-                        console.log('SW registered: ', registration);
+                        console.log('[PWA] SW registered successfully:', registration);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('[PWA] New version installing...');
+                            
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    console.log('[PWA] New version available');
+                                    showUpdateNotification();
+                                }
+                            });
+                        });
+                        
+                        // Listen for messages from Service Worker
+                        navigator.serviceWorker.addEventListener('message', (event) => {
+                            const { data } = event;
+                            if (data.type === 'UPDATE_AVAILABLE') {
+                                showUpdateNotification();
+                            }
+                        });
                     })
                     .catch((registrationError) => {
-                        console.log('SW registration failed: ', registrationError);
+                        console.error('[PWA] SW registration failed:', registrationError);
+                        // Don't show error to user, just log it
                     });
             });
+        } else {
+            console.log('[PWA] Service Worker not supported in this browser');
         }
+
+        // Show update notification
+        function showUpdateNotification() {
+            // Check if notification already exists
+            if (document.querySelector('.update-notification')) {
+                return;
+            }
+
+            // Get current language and translation function from Alpine.js app instance
+            const appElement = document.querySelector('[x-data]');
+            let translateFn = null;
+            let currentLang = 'en';
+            
+            if (appElement && appElement._x_dataStack && appElement._x_dataStack[0]) {
+                const appData = appElement._x_dataStack[0];
+                translateFn = appData.translate;
+                currentLang = appData.language || 'en';
+            }
+            
+            // Fallback translation function
+            const translate = (key) => {
+                if (translateFn && typeof translateFn === 'function') {
+                    return translateFn(key);
+                }
+                
+                // Fallback to global translations if available
+                if (typeof translations !== 'undefined' && translations[currentLang] && translations[currentLang][key]) {
+                    return translations[currentLang][key];
+                }
+                
+                // Final fallback
+                const fallbacks = {
+                    'updateAvailable': {
+                        'en': 'New version available',
+                        'es': 'Nueva versión disponible',
+                        'fr': 'Nouvelle version disponible',
+                        'de': 'Neue Version verfügbar',
+                        'it': 'Nuova versione disponibile',
+                        'pt': 'Nova versão disponível',
+                        'ca': 'Nova versió disponible'
+                    },
+                    'updateNow': {
+                        'en': 'Update now',
+                        'es': 'Actualizar ahora',
+                        'fr': 'Mettre à jour maintenant',
+                        'de': 'Jetzt aktualisieren',
+                        'it': 'Aggiorna ora',
+                        'pt': 'Atualizar agora',
+                        'ca': 'Actualitzar ara'
+                    }
+                };
+                
+                return fallbacks[key] && fallbacks[key][currentLang] 
+                    ? fallbacks[key][currentLang] 
+                    : fallbacks[key]['en'] || key;
+            };
+
+            const notification = document.createElement('div');
+            notification.className = 'update-notification fixed top-4 right-4 bg-blue-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm transform transition-all duration-300 translate-x-full';
+            notification.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        <span>${translate('updateAvailable')}</span>
+                    </div>
+                    <button onclick="closeUpdateNotification(this)" class="ml-4 text-blue-200 hover:text-white">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="mt-2">
+                    <button onclick="updateApp()" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors">
+                        ${translate('updateNow')}
+                    </button>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Animate in
+            setTimeout(() => {
+                notification.classList.remove('translate-x-full');
+            }, 100);
+            
+            // Auto-remove after 15 seconds
+            setTimeout(() => {
+                closeUpdateNotification(notification);
+            }, 15000);
+        }
+
+        // Close update notification
+        function closeUpdateNotification(element) {
+            const notification = element.closest ? element.closest('.update-notification') : element;
+            if (notification) {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        notification.remove();
+                    }
+                }, 300);
+            }
+        }
+
+        // Check for updates every 30 minutes
+        setInterval(() => {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'CHECK_FOR_UPDATE'
+                });
+            }
+        }, 30 * 60 * 1000);
     </script>
 </body>
 </html>

@@ -113,7 +113,18 @@ const langDe = {
     "hideDetails": "Details Verstecken",
     "noDataAvailable": "Keine Daten verfügbar",
     "refreshStats": "Statistiken Aktualisieren",
-    "calculating": "Berechnung läuft..."
+    "calculating": "Berechnung läuft...",
+    
+    // Operation states
+    "filtering": "Filtern",
+    "sorting": "Sortieren",
+    "paginating": "Seite wechseln",
+    "updating": "Aktualisieren",
+    
+    // PWA and Updates
+    "updateAvailable": "Neue Version verfügbar",
+    "updateNow": "Jetzt aktualisieren",
+    "appUpdated": "App aktualisiert"
 };
 
 // Register this language with the translation system

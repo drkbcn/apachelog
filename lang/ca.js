@@ -113,7 +113,18 @@ const langCa = {
     "hideDetails": "Amagar Detalls",
     "noDataAvailable": "No hi ha dades disponibles",
     "refreshStats": "Actualitzar Estadístiques",
-    "calculating": "Calculant..."
+    "calculating": "Calculant...",
+    
+    // Operation states
+    "filtering": "Filtrant",
+    "sorting": "Ordenant",
+    "paginating": "Canviant pàgina",
+    "updating": "Actualitzant",
+    
+    // PWA and Updates
+    "updateAvailable": "Nova versió disponible",
+    "updateNow": "Actualitzar ara",
+    "appUpdated": "App actualitzada"
 };
 
 // Register this language with the translation system

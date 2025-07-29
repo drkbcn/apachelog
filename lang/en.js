@@ -137,7 +137,17 @@ const langEn = {
     "filtering": "Filtering",
     "sorting": "Sorting",
     "paginating": "Changing page",
-    "updating": "Updating"
+    "updating": "Updating",
+    
+    // PWA and Updates
+    "updateAvailable": "New version available",
+    "updateNow": "Update now",
+    "appUpdated": "App updated",
+    
+    // PWA and Updates
+    "updateAvailable": "Update available",
+    "updateNow": "Update now",
+    "appUpdated": "App updated"
 };
 
 // Register this language with the translation system

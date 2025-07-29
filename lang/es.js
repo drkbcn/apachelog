@@ -137,7 +137,12 @@ const langEs = {
     "filtering": "Filtrando",
     "sorting": "Ordenando",
     "paginating": "Cambiando página",
-    "updating": "Actualizando"
+    "updating": "Actualizando",
+    
+    // PWA and Updates
+    "updateAvailable": "Nueva versión disponible",
+    "updateNow": "Actualizar ahora",
+    "appUpdated": "Aplicación actualizada"
 };
 
 // Register this language with the translation system
