@@ -102,6 +102,10 @@ function apacheLogViewer() {
             this.uniqueStatusCodes = this.uniqueStatusCodes || [];
             this.uniqueMethods = this.uniqueMethods || [];
             
+            // Initialize processing flags to prevent recursion
+            this._combiningResults = false;
+            this._finishingProcessing = false;
+            
             // Ensure statistics object is properly initialized
             this.statistics = this.statistics || {
                 totalRequests: 0,
@@ -305,6 +309,10 @@ function apacheLogViewer() {
             this.uniqueMethods = [];
             this.currentPage = 1;
             
+            // Reset processing flags to prevent recursion issues
+            this._combiningResults = false;
+            this._finishingProcessing = false;
+            
             // Clear cache and reset pagination
             this.ipInfoCache = {};
             this.adjustPageSizeForFileSize(fileSizeMB);
@@ -379,6 +387,30 @@ function apacheLogViewer() {
                 const workers = [];
                 const results = [];
                 let completedWorkers = 0;
+                let processingComplete = false; // Add flag to prevent multiple calls
+                
+                // Function to handle completion
+                let handleCompletion = () => {
+                    if (processingComplete) {
+                        console.warn('handleCompletion called but processing already complete');
+                        return; // Prevent multiple calls
+                    }
+                    processingComplete = true;
+                    
+                    console.log(`All workers completed (${completedWorkers}/${maxWorkers}), combining results...`);
+                    console.log('Results array length:', results.length);
+                    console.log('Results defined indices:', results.map((r, i) => r !== undefined ? i : null).filter(i => i !== null));
+                    
+                    self.combineWorkerResults(results);
+                    workers.forEach((w, index) => {
+                        try {
+                            w.terminate();
+                            console.log(`Worker ${index} terminated successfully`);
+                        } catch (error) {
+                            console.warn(`Error terminating worker ${index}:`, error);
+                        }
+                    });
+                };
                 
                 for (let i = 0; i < maxWorkers; i++) {
                     try {
@@ -386,6 +418,8 @@ function apacheLogViewer() {
                         workers.push(worker);
                         
                         worker.onmessage = function(e) {
+                            if (processingComplete) return; // Extra safety check
+                            
                             const { type, workerIndex, parsed, uniqueStatuses, uniqueMethods, progress, error } = e.data;
                             
                             if (type === 'progress') {
@@ -393,33 +427,45 @@ function apacheLogViewer() {
                                 const workerProgress = (progress / 100) * (60 / maxWorkers);
                                 self.processProgress = Math.round(baseProgress + workerProgress);
                             } else if (type === 'complete') {
+                                // Ensure we don't process the same worker completion twice
+                                if (results[workerIndex] !== undefined) {
+                                    console.warn(`Worker ${workerIndex} already completed, ignoring duplicate completion`);
+                                    return;
+                                }
+                                
                                 results[workerIndex] = { parsed, uniqueStatuses, uniqueMethods };
                                 completedWorkers++;
                                 
                                 if (completedWorkers === maxWorkers) {
-                                    self.combineWorkerResults(results);
-                                    workers.forEach(w => w.terminate());
+                                    handleCompletion();
                                 }
                             } else if (type === 'error') {
                                 console.error(`Worker ${workerIndex} error:`, error);
+                                
+                                // Ensure we don't process the same worker error twice
+                                if (results[workerIndex] !== undefined) {
+                                    console.warn(`Worker ${workerIndex} already processed, ignoring duplicate error`);
+                                    return;
+                                }
+                                
                                 completedWorkers++;
                                 results[workerIndex] = { parsed: [], uniqueStatuses: [], uniqueMethods: [] };
                                 
                                 if (completedWorkers === maxWorkers) {
-                                    self.combineWorkerResults(results);
-                                    workers.forEach(w => w.terminate());
+                                    handleCompletion();
                                 }
                             }
                         };
                         
                         worker.onerror = function(error) {
                             console.error(`Worker ${i} error:`, error);
-                            completedWorkers++;
-                            results[i] = { parsed: [], uniqueStatuses: [], uniqueMethods: [] };
-                            
-                            if (completedWorkers === maxWorkers) {
-                                self.combineWorkerResults(results);
-                                workers.forEach(w => w.terminate());
+                            if (!processingComplete && results[i] === undefined) {
+                                completedWorkers++;
+                                results[i] = { parsed: [], uniqueStatuses: [], uniqueMethods: [] };
+                                
+                                if (completedWorkers === maxWorkers) {
+                                    handleCompletion();
+                                }
                             }
                         };
                         
@@ -437,6 +483,37 @@ function apacheLogViewer() {
                         return;
                     }
                 }
+                
+                // Add timeout safety mechanism
+                const workerTimeout = setTimeout(() => {
+                    if (!processingComplete) {
+                        console.warn('Worker processing timeout, forcing completion with available results');
+                        processingComplete = true;
+                        
+                        // Fill missing results with empty data
+                        for (let i = 0; i < maxWorkers; i++) {
+                            if (results[i] === undefined) {
+                                results[i] = { parsed: [], uniqueStatuses: [], uniqueMethods: [] };
+                            }
+                        }
+                        
+                        self.combineWorkerResults(results);
+                        workers.forEach((w, index) => {
+                            try {
+                                w.terminate();
+                            } catch (error) {
+                                console.warn(`Error terminating worker ${index} in timeout:`, error);
+                            }
+                        });
+                    }
+                }, 300000); // 5 minute timeout
+                
+                // Wrap handleCompletion to clear timeout
+                const originalHandleCompletion = handleCompletion;
+                handleCompletion = () => {
+                    clearTimeout(workerTimeout);
+                    originalHandleCompletion();
+                };
             };
             
             reader.onprogress = function(e) {
@@ -457,52 +534,106 @@ function apacheLogViewer() {
         
         // Combine results from multiple workers
         combineWorkerResults(results) {
-            this.processProgress = 85;
-            
-            const allLogs = [];
-            const allStatuses = new Set();
-            const allMethods = new Set();
-            
-            // Combine all results with safety checks
-            for (const result of results) {
-                if (result && result.parsed && Array.isArray(result.parsed)) {
-                    allLogs.push(...result.parsed);
-                }
-                if (result && result.uniqueStatuses && Array.isArray(result.uniqueStatuses)) {
-                    result.uniqueStatuses.forEach(status => allStatuses.add(status));
-                }
-                if (result && result.uniqueMethods && Array.isArray(result.uniqueMethods)) {
-                    result.uniqueMethods.forEach(method => allMethods.add(method));
-                }
+            // Prevent recursive calls - use a static flag
+            if (this._combiningResults) {
+                console.warn('combineWorkerResults already in progress, skipping duplicate call');
+                return;
             }
             
-            // Sort by line number to maintain order
-            allLogs.sort((a, b) => (a.lineNumber || 0) - (b.lineNumber || 0));
+            // Additional check for processing state
+            if (this.isProcessing === false) {
+                console.warn('combineWorkerResults called but processing already finished');
+                return;
+            }
             
-            this.logs = allLogs;
-            this.uniqueStatusCodes = Array.from(allStatuses).sort((a, b) => a - b);
-            this.uniqueMethods = Array.from(allMethods).sort();
+            this._combiningResults = true;
             
-            this.processProgress = 95;
-            this.finishProcessingFinal();
+            try {
+                this.processProgress = 85;
+                
+                const allLogs = [];
+                const allStatuses = new Set();
+                const allMethods = new Set();
+                
+                // Combine all results with safety checks
+                for (const result of results) {
+                    if (result && result.parsed && Array.isArray(result.parsed)) {
+                        allLogs.push(...result.parsed);
+                    }
+                    if (result && result.uniqueStatuses && Array.isArray(result.uniqueStatuses)) {
+                        result.uniqueStatuses.forEach(status => allStatuses.add(status));
+                    }
+                    if (result && result.uniqueMethods && Array.isArray(result.uniqueMethods)) {
+                        result.uniqueMethods.forEach(method => allMethods.add(method));
+                    }
+                }
+                
+                // Sort by line number to maintain order
+                allLogs.sort((a, b) => (a.lineNumber || 0) - (b.lineNumber || 0));
+                
+                this.logs = allLogs;
+                this.uniqueStatusCodes = Array.from(allStatuses).sort((a, b) => a - b);
+                this.uniqueMethods = Array.from(allMethods).sort();
+                
+                this.processProgress = 95;
+                this.finishProcessingFinal();
+                
+            } catch (error) {
+                console.error('Error in combineWorkerResults:', error);
+                this.isProcessing = false;
+                this.processProgress = 0;
+                this._combiningResults = false;
+                alert(this.translate('fileProcessError') || 'Error processing file. Please try again.');
+            }
         },
         
         // Finish processing and update UI (for worker results)
         finishProcessingFinal() {
-            // Calculate date range for filters
-            this.calculateLogDateRange();
+            // Prevent multiple calls with dedicated flag
+            if (this._finishingProcessing) {
+                console.warn('finishProcessingFinal already in progress, skipping duplicate call');
+                return;
+            }
             
-            // Apply initial filters and pagination
-            this.applyFilters();
+            // Additional check for processing state
+            if (this.isProcessing === false) {
+                console.warn('finishProcessingFinal called but processing already finished');
+                return;
+            }
             
-            this.processProgress = 100;
-            this.isProcessing = false;
+            this._finishingProcessing = true;
             
-            console.log(`Processed ${this.logs.length} log entries with optimized performance`);
-            
-            // Reset file input
-            const fileInput = document.getElementById('file-upload');
-            if (fileInput) fileInput.value = '';
+            try {
+                // Calculate date range for filters
+                this.calculateLogDateRange();
+                
+                // Apply initial filters and pagination
+                this.applyFilters();
+                
+                this.processProgress = 100;
+                this.isProcessing = false;
+                
+                console.log(`Processed ${this.logs.length} log entries with optimized performance`);
+                
+                // Reset file input
+                const fileInput = document.getElementById('file-upload');
+                if (fileInput) fileInput.value = '';
+                
+            } catch (error) {
+                console.error('Error in finishProcessingFinal:', error);
+                this.isProcessing = false;
+                this.processProgress = 0;
+                
+                // Reset file input on error
+                const fileInput = document.getElementById('file-upload');
+                if (fileInput) fileInput.value = '';
+                
+                alert(this.translate('fileProcessError') || 'Error processing file. Please try again.');
+            } finally {
+                // Always reset the flags
+                this._finishingProcessing = false;
+                this._combiningResults = false;
+            }
         },
         
         // Process the log file content
@@ -2124,7 +2255,7 @@ function apacheLogViewer() {
                 console.log('App version initialized:', this.appVersion);
             } else {
                 console.warn('VersionManager not available, using fallback version');
-                this.appVersion = 'v2.4.1'; // Fallback
+                this.appVersion = 'v2.4.2'; // Fallback
             }
         },
 

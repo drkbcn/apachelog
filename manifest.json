@@ -2,7 +2,7 @@
   "name": "Apache Log Viewer",
   "short_name": "LogViewer",
   "description": "A web-based tool to visualize and analyze Apache server logs",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "start_url": "/apachelog/",
   "display": "standalone",
   "background_color": "#f8fafc",

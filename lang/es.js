@@ -19,6 +19,7 @@ const langEs = {
     "invalidFileType": "Por favor seleccione un archivo de log válido (.log, .txt, .access, .error)",
     "fileReadError": "Error al leer el archivo. Por favor, inténtelo de nuevo.",
     "processingError": "Error al procesar el archivo. Por favor, verifique el formato.",
+    "fileProcessError": "Error al procesar el archivo. Por favor, intente de nuevo.",
     "noValidLogs": "No se encontraron entradas de log válidas. Por favor, verifique el formato del log.",
     "optimizedProcessing": "Usando procesamiento optimizado para archivos grandes...",
     "calculating": "Calculando estadísticas...",

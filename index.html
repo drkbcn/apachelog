@@ -62,8 +62,8 @@
                 
                 <!-- Version indicator -->
                 <div class="text-xs text-gray-400 ml-3 flex items-center" x-data="{ showUpdate: false }" 
-                     x-init="appVersion = (typeof VersionManager !== 'undefined') ? 'v' + VersionManager.getVersionInfo().version : 'v2.4.1'">
-                    <span x-text="appVersion" class="mr-2">v2.4.1</span>
+                     x-init="appVersion = (typeof VersionManager !== 'undefined') ? 'v' + VersionManager.getVersionInfo().version : 'v2.4.2'">
+                    <span x-text="appVersion" class="mr-2">v2.4.2</span>
                     <div x-show="updateAvailable" class="ml-2">
                         <button @click="updateApp()" class="bg-blue-500 text-white px-2 py-1 text-xs rounded hover:bg-blue-600 transition-colors" x-text="translate('updateAvailable')">
                             Update Available

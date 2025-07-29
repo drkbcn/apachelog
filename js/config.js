@@ -5,7 +5,7 @@
 
 // Version configuration - Update only here for new versions
 export const APP_CONFIG = {
-    VERSION: '2.4.1',
+    VERSION: '2.4.2',
     BUILD: '20250729001',
     NAME: 'Apache Log Viewer',
     CACHE_PREFIX: 'apache-log-viewer-v'

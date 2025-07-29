@@ -1,6 +1,6 @@
 // Service Worker for Apache Log Viewer PWA
 // Note: Version is duplicated here to avoid dependency on external files
-const APP_VERSION = '2.4.1';
+const APP_VERSION = '2.4.2';
 const CACHE_NAME = `apache-log-viewer-v${APP_VERSION}`;
 const CACHE_VERSION = `v${APP_VERSION}`;
 const urlsToCache = [
