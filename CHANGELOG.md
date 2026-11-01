@@ -1,5 +1,20 @@
 # Changelog
 
+## Version 2.5.0
+
+### Fixes
+- Unified log parser (`js/parser.js`) shared by page and worker: the worker used different field names, which broke search, date filter and sorting on big files
+- Date filter works (and "clear date filter" refreshes the table); presets use local dates
+- Sorting no longer flips direction after loading or ignores active filters; zero-result filters show zero stats
+- Page size selector no longer concatenates strings; log files without `.log` extension (`access_log`) are accepted
+- Geo info (flag, country, region) displays correctly; removed forbidden `User-Agent` header
+- Single service worker registration (it was registered twice)
+
+### Performance
+- One worker reads the `File` directly (no more 6 copies of the file); results arrive in batches
+- Big arrays are frozen so Alpine does not proxy every entry; single-pass filtering; debounced search
+- Statistics cache browser/OS detection per user agent
+
 ## Version 2.3.0 - July 28, 2025
 
 ### 🌍 Multi-Language Expansion

@@ -19,15 +19,13 @@
     <link rel="apple-touch-icon" href="icons/icon-192.svg">
     <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg">
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Heroicons (para iconos) -->
-    <script src="https://unpkg.com/@heroicons/vue@1.0.4/dist/heroicons.js"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <!-- Version Manager -->
     <script src="js/version.js"></script>
     <!-- Estilos personalizados -->
     <link rel="stylesheet" href="css/styles.css">
     <!-- Alpine.js para interactividad -->
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.17.5/dist/cdn.min.js" crossorigin="anonymous"></script>
 </head>
 <body class="bg-gray-50 text-gray-800" x-data="apacheLogViewer()">
     <div class="container mx-auto px-4 py-8">
@@ -62,8 +60,8 @@
                 
                 <!-- Version indicator -->
                 <div class="text-xs text-gray-400 ml-3 flex items-center" x-data="{ showUpdate: false }" 
-                     x-init="appVersion = (typeof VersionManager !== 'undefined') ? 'v' + VersionManager.getVersionInfo().version : 'v2.4.2'">
-                    <span x-text="appVersion" class="mr-2">v2.4.2</span>
+                     x-init="appVersion = (typeof VersionManager !== 'undefined') ? 'v' + VersionManager.getVersionInfo().version : 'v2.5.0'">
+                    <span x-text="appVersion" class="mr-2">v2.5.0</span>
                     <div x-show="updateAvailable" class="ml-2">
                         <button @click="updateApp()" class="bg-blue-500 text-white px-2 py-1 text-xs rounded hover:bg-blue-600 transition-colors" x-text="translate('updateAvailable')">
                             Update Available
@@ -190,7 +188,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                 </div>
-                <input x-model="searchQuery" @input="applyFilters" type="search" class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" x-bind:placeholder="translate('search')">
+                <input x-model="searchQuery" @input.debounce.300ms="applyFilters" type="search" class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" x-bind:placeholder="translate('search')">
             </div>
 
             <!-- Filtro de rango de fechas -->
@@ -1029,20 +1027,12 @@
     <script src="lang/it.js"></script>
     <script src="lang/pt.js"></script>
     <script src="lang/ca.js"></script>
+    <script src="js/parser.js"></script>
     <script src="js/script.js"></script>
     
     <!-- Service Worker Registration and Version Management -->
     <script>
         // Global version management functions
-        window.initVersionManager = function() {
-            if (typeof VersionManager !== 'undefined') {
-                const versionInfo = VersionManager.getVersionInfo();
-                console.log('Version initialized:', versionInfo);
-                return versionInfo;
-            }
-            return { version: '1.0.0' };
-        };
-
         window.updateApp = function() {
             window.location.reload();
         };
@@ -1065,14 +1055,6 @@
                                     showUpdateNotification();
                                 }
                             });
-                        });
-                        
-                        // Listen for messages from Service Worker
-                        navigator.serviceWorker.addEventListener('message', (event) => {
-                            const { data } = event;
-                            if (data.type === 'UPDATE_AVAILABLE') {
-                                showUpdateNotification();
-                            }
                         });
                     })
                     .catch((registrationError) => {
@@ -1098,6 +1080,7 @@
             
             if (appElement && appElement._x_dataStack && appElement._x_dataStack[0]) {
                 const appData = appElement._x_dataStack[0];
+                appData.updateAvailable = true; // shows the header "update" button
                 translateFn = appData.translate;
                 currentLang = appData.language || 'en';
             }
@@ -1191,10 +1174,8 @@
 
         // Check for updates every 30 minutes
         setInterval(() => {
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({
-                    type: 'CHECK_FOR_UPDATE'
-                });
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistration().then(r => r && r.update());
             }
         }, 30 * 60 * 1000);
     </script>

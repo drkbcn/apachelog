@@ -1,6 +1,6 @@
 // Version configuration
-const APP_VERSION = '2.4.2';
-const APP_BUILD = '20250729001';
+const APP_VERSION = '2.5.0';
+const APP_BUILD = '20251101001';
 const APP_NAME = 'Apache Log Viewer';
 
 // Version utilities
@@ -29,22 +29,6 @@ const VersionManager = {
         return `v${this.current}`;
     },
     
-    // Check if a new version is available (for future use)
-    async checkForUpdates() {
-        try {
-            // This would typically check against a server endpoint
-            // For now, we'll check against the service worker cache
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                // Trigger update check in service worker
-                navigator.serviceWorker.controller.postMessage({
-                    type: 'CHECK_FOR_UPDATE'
-                });
-            }
-        } catch (error) {
-            console.error('Error checking for updates:', error);
-        }
-    },
-    
     // Display version info
     displayVersion() {
         const versionInfo = this.getVersionInfo();
@@ -54,5 +38,5 @@ const VersionManager = {
 };
 
 // Make version available globally
-window.VersionManager = VersionManager;
-window.APP_VERSION = APP_VERSION;
+self.VersionManager = VersionManager;
+self.APP_VERSION = APP_VERSION;

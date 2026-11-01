@@ -1,12 +1,12 @@
 // Service Worker for Apache Log Viewer PWA
-// Note: Version is duplicated here to avoid dependency on external files
-const APP_VERSION = '2.4.2';
-const CACHE_NAME = `apache-log-viewer-v${APP_VERSION}`;
-const CACHE_VERSION = `v${APP_VERSION}`;
+importScripts('./js/version.js'); // single source of the app version
+
+const CACHE_NAME = `apache-log-viewer-v${self.APP_VERSION}`;
 const urlsToCache = [
   './',
   './index.html',
   './css/styles.css',
+  './js/parser.js',
   './js/script.js',
   './js/translations.js',
   './js/log-worker.js',
@@ -23,128 +23,47 @@ const urlsToCache = [
   './manifest.json'
 ];
 
-// Install event
+// Install: if any file fails to cache, the install fails and the previous version keeps running
 self.addEventListener('install', (event) => {
-  console.log('[ServiceWorker] Install event - Version:', CACHE_VERSION);
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[ServiceWorker] Caching files');
-        return cache.addAll(urlsToCache);
-      })
-      .then(() => {
-        console.log('[ServiceWorker] Files cached successfully');
-        // Force activation of new service worker
-        return self.skipWaiting();
-      })
-      .catch((error) => {
-        console.error('[ServiceWorker] Failed to cache files:', error);
-      })
+      .then((cache) => cache.addAll(urlsToCache))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Fetch event
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      }
-    )
-  );
-});
-
-// Activate event
+// Activate: drop old caches and take control of open pages
 self.addEventListener('activate', (event) => {
-  console.log('[ServiceWorker] Activate event - Version:', CACHE_VERSION);
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME && cacheName.startsWith('apache-log-viewer-')) {
-            console.log('[ServiceWorker] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-    .then(() => {
-      console.log('[ServiceWorker] Old caches cleaned up');
-      // Take control of all pages
-      return self.clients.claim();
-    })
-    .then(() => {
-      // Notify all clients about the update
-      return self.clients.matchAll();
-    })
-    .then(clients => {
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'SW_UPDATED',
-          version: CACHE_VERSION
-        });
-      });
-    })
+    caches.keys()
+      .then((names) => Promise.all(
+        names
+          .filter((name) => name !== CACHE_NAME && name.startsWith('apache-log-viewer-'))
+          .map((name) => caches.delete(name))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-// Message handler for communication with main thread
-self.addEventListener('message', event => {
-  const { data } = event;
-  
-  switch (data.type) {
-    case 'CHECK_FOR_UPDATE':
-      checkForUpdates(event);
-      break;
-      
-    case 'SKIP_WAITING':
-      self.skipWaiting();
-      break;
-      
-    case 'GET_VERSION':
-      event.ports[0].postMessage({
-        type: 'VERSION_INFO',
-        version: CACHE_VERSION,
-        cacheName: CACHE_NAME
-      });
-      break;
-      
-    default:
-      console.log('[ServiceWorker] Unknown message type:', data.type);
-  }
-});
+// Fetch: same-origin GETs are served from cache and refreshed in the background
+// (stale-while-revalidate), so edits show up on the next load even without a version bump.
+// The two CDN scripts (Tailwind, Alpine) are cached the same way so the app works offline.
+const CDN_ORIGINS = ['https://cdn.tailwindcss.com', 'https://unpkg.com'];
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const { origin } = new URL(request.url);
+  if (request.method !== 'GET' || (origin !== self.location.origin && !CDN_ORIGINS.includes(origin))) return;
 
-// Check for updates function
-async function checkForUpdates(event) {
-  try {
-    console.log('[ServiceWorker] Checking for updates...');
-    
-    // Check if there's a newer version of the main files
-    const response = await fetch('./js/version.js', { cache: 'no-cache' });
-    
-    if (response.ok) {
-      const currentCache = await caches.open(CACHE_NAME);
-      const cachedVersion = await currentCache.match('./js/version.js');
-      
-      if (!cachedVersion || response.headers.get('etag') !== cachedVersion.headers.get('etag')) {
-        // New version detected
-        console.log('[ServiceWorker] New version detected');
-        
-        // Notify the client
-        const clients = await self.clients.matchAll();
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'UPDATE_AVAILABLE',
-            version: CACHE_VERSION
-          });
-        });
-      }
-    }
-  } catch (error) {
-    console.error('[ServiceWorker] Update check failed:', error);
-  }
-}
+  event.respondWith(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(request, { ignoreSearch: true });
+      const network = fetch(request)
+        .then((response) => {
+          if (response.ok || response.type === 'opaque') cache.put(request, response.clone());
+          return response;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
+  );
+});
