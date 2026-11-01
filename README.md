@@ -1,12 +1,13 @@
 # Apache Log Viewer 🌐
 
 ## Overview
-🔍 **Apache Log Viewer** is a powerful, web-based tool designed to visualize and analyze Apache server logs. Built with modern web technologies including **Tailwind CSS**, **Alpine.js**, and **Heroicons**, this application provides an intuitive interface for log management and analysis.
+🔍 **Apache Log Viewer** is a powerful, web-based tool designed to visualize and analyze Apache server logs. Built with **Tailwind CSS** and **Alpine.js**, this application provides an intuitive interface for log management and analysis.
 
 ## ✨ Features
 
 ### 🌎 Core Functionality
-- **Multi-language support** (English, Spanish)
+- **Multi-language support** (7 languages)
+- **Installable PWA** that also works offline
 - **Advanced log filtering** and search capabilities
 - **Real-time log parsing** with multiple format support
 - **Interactive data visualization** with sortable columns
@@ -20,11 +21,12 @@
 - **Performance metrics** and processing statistics
 
 ### 🚀 Performance Optimizations
-- **Chunked processing** for large files (50MB+ support)
-- **Virtual pagination** for smooth navigation
+- **Web Worker parsing** keeps the UI responsive (a 400,000-line / ~60MB log loads in ~2s on a desktop)
+- **Single-pass filtering**, debounced search and cached statistics
+- **Pagination** for smooth navigation
 - **Intelligent caching** for IP information
 - **Progressive loading** with real-time progress indicators
-- **Memory-efficient** parsing algorithms
+- **Memory-efficient** storage of parsed entries
 
 ### 🛡️ Security Features
 - **Client-side processing** - your logs never leave your browser
@@ -36,18 +38,17 @@
 
 | Technology | Purpose | Version |
 |------------|---------|---------|
-| **Tailwind CSS** | Styling & UI Framework | Latest CDN |
-| **Alpine.js** | Reactive JavaScript Framework | 3.x |
-| **Heroicons** | SVG Icon Library | Latest |
+| **Tailwind CSS** | Styling & UI Framework | 3.4.17 CDN |
+| **Alpine.js** | Reactive JavaScript Framework | 3.17.5 |
 | **Vanilla JavaScript** | Core Application Logic | ES6+ |
 
 ## 🎯 Supported Log Formats
 
-- **Combined Log Format** (CLF)
-- **Common Log Format** 
-- **Extended Log Format** with additional fields
-- **NCSA format variations**
-- **Custom Apache configurations**
+- **Combined Log Format**
+- **Common Log Format**
+- Lines that do not match are parsed loosely (IP, date, request, status) when possible
+
+Not supported: the Apache *error* log format and logs with a vhost prefix (`%v:%p`).
 
 ## 🚀 Usage
 
@@ -59,22 +60,22 @@ Visit the live version at: [Apache Log Viewer on GitHub Pages](https://drkbcn.gi
    ```bash
    git clone https://github.com/drkbcn/apachelog.git
    ```
-2. Open `index.html` in your web browser
+2. Serve the folder with any static server (e.g. `python3 -m http.server`) and open it in your browser
 3. Upload your Apache log file and start analyzing!
 
+Opening `index.html` directly (`file://`) also works, but without the Web Worker and service worker (parsing runs on the main thread and there is no offline mode).
+
+### Install as an app (PWA)
+Use your browser's "Install" option. After the first load with network, the app and its Tailwind/Alpine scripts are cached and it works offline. Updates are picked up automatically and a notice offers to reload.
+
 ### File Requirements
-- **Supported extensions**: `.log`, `.txt`, `.access`, `.error`
-- **Maximum recommended size**: 50MB (larger files supported with performance warning)
+- **Any text log file** (`access.log`, `access_log`, `.txt`...); there is no extension check
+- **Large files**: above 50MB you are asked to confirm; the whole file is read into memory
 - **Encoding**: UTF-8 recommended
 
 ## 📊 Performance Benchmarks
 
-| File Size | Processing Time | Memory Usage | Recommended Page Size |
-|-----------|----------------|--------------|----------------------|
-| < 1MB | < 1 second | < 10MB | 500-1000 entries |
-| 1-10MB | 1-5 seconds | 10-50MB | 250-500 entries |
-| 10-50MB | 5-15 seconds | 50-200MB | 100-250 entries |
-| > 50MB | 15+ seconds | 200MB+ | 50-100 entries |
+Measured on a desktop Chromium with a synthetic 400,000-line log: load ~2s, filter ~0.3s, sort ~0.2s. The default page size is picked from the file size (500 entries under 10MB, down to 50 above 100MB).
 
 ## 🌍 Internationalization
 
@@ -97,9 +98,9 @@ Language detection is automatic based on browser settings, with manual override 
 
 ### Browser Storage
 The application uses localStorage for:
-- Language preferences
-- Page size settings
-- IP information cache (24-hour TTL)
+- Language preference
+
+IP information is cached in memory for 24 hours (not persisted).
 
 ## 🤝 Contributing
 
@@ -115,6 +116,8 @@ We welcome contributions! Here's how you can help:
 - Follow existing code style and conventions
 - Add comments for complex functionality
 - Test with various log formats
+- Run `node tests/parser.test.js` after touching `js/parser.js`
+- Bump the version in `js/version.js` (and `manifest.json`) when releasing so the service worker cache refreshes
 - Ensure responsive design compatibility
 - Update documentation as needed
 
@@ -141,7 +144,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - **Apache Software Foundation** for the web server that generates these logs
 - **Tailwind CSS** team for the excellent utility-first framework
 - **Alpine.js** community for the lightweight reactive framework
-- **ipinfo.io** for geolocation services
+- **ipapi.co** for geolocation and **Google DNS over HTTPS** for reverse lookups
 - **AbuseIPDB** for IP reputation data
 - All contributors and users who help improve this project
 
